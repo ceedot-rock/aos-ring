@@ -14,3 +14,7 @@ primary_region = "ewr"
 [[http_service.checks]]
   grace_period = "10s"
   path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
