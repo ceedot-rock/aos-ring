@@ -1,5 +1,15 @@
 # aos-ring
 
+## What the Ring is
+
+The Ring is memory made of light. Instead of writing data onto a disk or a chip, it holds data as sustained patterns of laser beams interfering with each other — the angle of a beam decides where a piece of data lives, and the color of the beam decides which channel it belongs to. Different colors don't interfere with each other, so many channels can share the same space at once.
+
+Here is why that matters. Ordinary storage is a thing — a magnetized spot, a trapped charge — and things can be forensically recovered after you delete them. The Ring's storage is a pattern, sustained moment to moment by the beams. Kill the beams and the pattern dissolves. There is nothing left to recover, because there was never a thing there — only light, held in formation.
+
+Reading is exact: write data in, read the identical bits back out. And the Ring can do something disks can't — associative recall. Give it a partial or damaged query and it finds the closest stored pattern, the way you recognize a half-remembered face. In testing, a query with 20% of its bits flipped still returned the right address.
+
+It is volatile by nature, like RAM rather than a hard drive: restart the service and the patterns are gone. That is a feature, not a bug — memory that truly forgets.
+
 The aOs (agent operating system) optical Ring, deployed as Agent
 Rider infrastructure on Fly. Live at `https://aos-ring.fly.dev`.
 
