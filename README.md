@@ -54,7 +54,6 @@ curl localhost:8080/health
 ## Deploy (Fly)
 
 App `aos-ring`, org `corey-tasz-761`, region `ewr`, shared 1 CPU /
-256 MB RAM, `restart: always`, shared IPv4. The machine config embeds
-`server.py` + `optical_mem.py` via the Machines API `files` section and
-boots with `pip install numpy flask && python3 /srv/server.py`, so a
-restart rebuilds a clean (empty — volatile!) ring from scratch.
+256 MB RAM, `restart: always`, shared IPv4. Deploys from this repo via
+`fly.toml` + `Dockerfile` (`fly deploy`), so a restart rebuilds a clean
+(empty — volatile!) ring from scratch.

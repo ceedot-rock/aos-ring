@@ -9,15 +9,17 @@ Each tube houses lasers at 2 colors x 2 fine freqs x 2 polarizations x
 channels. Data pages are 64x64-bit interference patterns addressed by
 (tube, color, freq, pol, oam).
 
-Every read goes through the simulated channel model (optical_mem.py):
+Reads on /v1/ring/read go through the simulated channel model (optical_mem.py):
 crosstalk between channels + phase-jitter / shot / thermal noise, then
 thresholding. This is a real ring, not a dict: reads are physical.
+(/v1/ring/query instead correlates the query pattern against the stored
+bits directly — no channel model on that path.)
 
 VOLATILE BY DESIGN. Ring state lives in memory only. A restart
 clears it — it models RAM, not disk. Nothing here is persisted.
 
-Channel math: ~/workspace/optical-memory-sim/, SIM_NOTES.md documents
-every physical assumption.
+Channel math: see SIM_NOTES.md — it documents every physical assumption
+of the in-repo channel model.
 """
 import base64
 import os

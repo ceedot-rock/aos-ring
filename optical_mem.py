@@ -157,51 +157,6 @@ def ber(a, b):
     return float(np.mean(a != b))
 
 
-def qfunc(x):
-    """Q-function via erfc, for theoretical BER of OOK at threshold 0.5."""
-    from math import erfc, sqrt
-    return 0.5 * erfc(x / sqrt(2.0))
-
-
-def theory_ber(sigma):
-    """Theoretical BER: r = s + N(0, sigma), s in {0,1}, threshold 0.5."""
-    return qfunc(0.5 / sigma)
-
-
-def bits_to_pages(data: bytes, page_shape=DEFAULTS["page_shape"]):
-    """Pack bytes into (n_pages, H, W) uint8 bit arrays, MSB-first."""
-    H, Wd = page_shape
-    bits_per_page = H * Wd
-    total_bits = len(data) * 8
-    n_pages = (total_bits + bits_per_page - 1) // bits_per_page
-    arr = np.zeros(n_pages * bits_per_page, dtype=np.uint8)
-    bits = np.unpackbits(np.frombuffer(data, dtype=np.uint8))
-    arr[:total_bits] = bits
-    return arr.reshape(n_pages, H, Wd)
-
-
-def pages_to_bits(pages):
-    """Unpack (n_pages, H, W) uint8 bit arrays back to bytes."""
-    flat = np.asarray(pages, dtype=np.uint8).reshape(-1)
-    # trim to whole bytes
-    n_bytes = flat.size // 8
-    return np.packbits(flat[:n_bytes * 8]).tobytes()
-
-
-# ---------------------------------------------------------------------------
-# aOs tube geometry helpers (M5/M6)
-# ---------------------------------------------------------------------------
-
-def tube_orientations(n_tubes):
-    """Diameter orientations in degrees for n_tubes laser tubes.
-
-    Tube t sits at t*180/n_tubes degrees. Diameters are undirected lines,
-    so orientations span 180 deg, not 360. Every diameter crosses at the
-    center: the center is the Ring.
-    """
-    return np.array([t * 180.0 / n_tubes for t in range(n_tubes)])
-
-
 def human_view(values):
     """The 'human view': total intensity integrated over every channel axis.
 
