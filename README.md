@@ -1,5 +1,8 @@
 # aos-ring
 
+[![Audited checks](https://github.com/ceedot-rock/aos-ring/actions/workflows/audited-checks.yml/badge.svg)](https://github.com/ceedot-rock/aos-ring/actions/workflows/audited-checks.yml)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
+
 ## What the Ring is
 
 The Ring is memory made of light. Instead of writing data onto a disk or a chip, it holds data as sustained patterns of laser beams interfering with each other — the angle of a beam decides where a piece of data lives, and the color of the beam decides which channel it belongs to. Different colors don't interfere with each other, so many channels can share the same space at once.
