@@ -127,6 +127,33 @@ def _err(msg, code=400):
 # ---------------------------------------------------------------------------
 # routes
 # ---------------------------------------------------------------------------
+@app.get("/")
+def index():
+    """Service discovery: what this is and every endpoint it speaks."""
+    return jsonify({
+        "ok": True,
+        "service": "aos-ring",
+        "about": "The aOs (agent operating system) optical Ring as a network "
+                 "service. Agent Rider infrastructure. Volatile by design: "
+                 "ring state lives in memory only; a restart clears it "
+                 "(RAM, not disk).",
+        "ring": {"tubes": T, "colors": C, "freq": F, "pol": P, "oam_modes": L,
+                 "channels": N_CH, "page_bits": BITS_PER_PAGE},
+        "endpoints": {
+            "GET /": "this document",
+            "GET /health": "liveness + ring geometry",
+            "POST /v1/ring/write": "store 4096-bit pages at (tube, color, freq, pol, oam)",
+            "POST /v1/ring/read": "read pages through the simulated channel model (crosstalk + noise)",
+            "POST /v1/ring/query": "associative lookup: noisy pattern -> best-matching address",
+            "POST /v1/ring/route": "activate/deactivate tube diameters",
+            "POST /v1/ring/delete": "kill (no forensic remnant) or decohere a page",
+            "GET /v1/ring/glow": "human-view glow vs machine readout demo",
+        },
+        "docs": {"api_reference": "API.md", "channel_model": "SIM_NOTES.md"},
+        "license": "AGPL-3.0-or-later OR Slid Phi Labs Commercial",
+    })
+
+
 @app.get("/health")
 def health():
     with _lock:
