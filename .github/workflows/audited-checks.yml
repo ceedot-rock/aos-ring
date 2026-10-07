@@ -1,0 +1,58 @@
+name: Audited checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Write/query roundtrip smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Write/query roundtrip smoke
+        run: |
+          PORT=8099 python3 server.py & SRV=$!
+          trap "kill $SRV" EXIT
+          for i in $(seq 1 30); do curl -sf localhost:8099/health >/dev/null && break; sleep 1; done
+          curl -sf localhost:8099/health | grep -q '"service": *"aos-ring"'
+          python3 - <<'EOF'
+          import json, urllib.request
+          BITS = "01" * 2048  # exactly 4096 bits = one page
+          base = "http://localhost:8099"
+          def post(path, body):
+              req = urllib.request.Request(
+                  base + path, data=json.dumps(body).encode(),
+                  headers={"Content-Type": "application/json"}, method="POST")
+              return json.load(urllib.request.urlopen(req))
+          w = post("/v1/ring/write", {"pages": [{"address": [0, 0, 0, 0, 0], "bits": BITS}]})
+          assert w.get("ok") and w.get("written") == 1, w
+          q = post("/v1/ring/query", {"bits": BITS, "flips": 0.0})
+          assert q.get("ok"), q
+          assert q.get("address") == [0, 0, 0, 0, 0], q
+          assert q.get("score") == 1.0, q
+          print("write/query roundtrip OK:", q)
+          EOF
+
+  secrets-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for committed secrets
+        run: |
+          set -e
+          echo "Scanning for common secret patterns..."
+          ! grep -rnE "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|BEGIN [A-Z ]*PRIVATE KEY|sk_(live|test)_[A-Za-z0-9]+|xox[bap]-[A-Za-z0-9-]+|-----BEGIN" \
+            --include="*.py" --include="*.txt" --include="*.md" --include="*.yml" --include="requirements.txt" --exclude="audited-checks.yml" .
+          echo "No secrets found."
