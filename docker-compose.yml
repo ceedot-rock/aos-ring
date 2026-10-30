@@ -1,11 +1,15 @@
-# aos-ring with persistent ring state.
+# aos-ring as a persistent, password-gated vault.
 # The named volume holds the write-through snapshots (ring-state.npz);
 # the container can be rebuilt/restarted freely — state restores at boot.
+# Access: every /v1/ route requires the vault password — copy
+# .env.example to .env and set AOS_VAULT_PASSWORD (never commit .env).
 services:
   aos-ring:
     build: .
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       AOS_DATA_DIR: /data
     volumes:

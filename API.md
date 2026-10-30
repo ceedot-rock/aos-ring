@@ -3,9 +3,20 @@
 The aOs (agent operating system) optical Ring as a network service.
 Base URL: `https://aos-ring.fly.dev`
 
-**Volatile by design.** Ring state lives in memory only. A restart
-clears it — this models RAM, not disk. Writes are sustained interference
-patterns, not stored files.
+**A gated vault.** Every `/v1/` route requires the vault password:
+send header `X-Vault-Password: <password>` (or `Authorization: Bearer
+<password>`). The password is set server-side via the
+`AOS_VAULT_PASSWORD` environment variable; when none is configured the
+vault fails closed and `/v1/` answers 503. `GET /health` and `GET /`
+stay open and expose service metadata only.
+
+**State modes.** Default: volatile — ring state lives in memory only
+and a restart clears it (this models RAM, not disk). With
+`AOS_DATA_DIR` set (the Docker deployment sets it to the `/data`
+volume), every mutation is snapshotted write-through to
+`<AOS_DATA_DIR>/ring-state.npz` and restored at boot: the vault
+survives restarts. Writes are sustained interference patterns, not
+stored files.
 
 **Ring geometry (fixed):** 8 laser tubes × 2 colors × 2 fine freqs ×
 2 polarizations × 3 OAM (orbital angular momentum) modes = **192 live

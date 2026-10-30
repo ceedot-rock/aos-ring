@@ -24,10 +24,18 @@ temp-file + rename), and boot restores the snapshot if one exists.
 The channel model never changes — persistence stores the intended
 bits exactly as written, reads still pass through the optics.
 
+VAULT GATE. Every /v1/ route is password-only: the request must carry
+the vault password (header X-Vault-Password, or Authorization: Bearer)
+matching AOS_VAULT_PASSWORD, compared in constant time. If no password
+is configured the vault fails closed — /v1/ answers 503 until one is
+set. /health and / stay open so platform health checks work; they
+expose service metadata only, never ring contents.
+
 Channel math: see SIM_NOTES.md — it documents every physical assumption
 of the in-repo channel model.
 """
 import base64
+import hmac
 import os
 import threading
 
@@ -63,6 +71,28 @@ CHANNEL = {
 app = Flask(__name__)
 _lock = threading.Lock()
 _rng = np.random.default_rng()         # unseeded: a real ring has real noise
+
+# ---------------------------------------------------------------------------
+# vault gate: password-only access to every /v1/ route
+# ---------------------------------------------------------------------------
+VAULT_PASSWORD = os.environ.get("AOS_VAULT_PASSWORD", "")
+
+
+@app.before_request
+def _vault_gate():
+    if not request.path.startswith("/v1/"):
+        return None                     # /health and / stay open (metadata only)
+    if not VAULT_PASSWORD:
+        return jsonify({"ok": False, "error": "vault locked: "
+                        "AOS_VAULT_PASSWORD is not configured"}), 503
+    supplied = request.headers.get("X-Vault-Password", "")
+    if not supplied:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            supplied = auth[len("Bearer "):]
+    if not supplied or not hmac.compare_digest(supplied, VAULT_PASSWORD):
+        return jsonify({"ok": False, "error": "vault password required"}), 401
+    return None
 
 # Ring state. In-memory working set; when DATA_DIR is set, every
 # mutation is written through to a snapshot on disk and restored at
@@ -231,6 +261,7 @@ def health():
         return jsonify({
             "ok": True,
             "service": "aos-ring",
+            "vault": {"gated": True, "password_configured": bool(VAULT_PASSWORD)},
             "volatile": not DATA_DIR,
             "volatility_note": ("persistence on: mutations snapshot to "
                                 "AOS_DATA_DIR and restore at boot"

@@ -32,11 +32,21 @@ lookup, no address bus), **delete** (`kill` = no forensic remnant,
 `decohere` = present-but-unreadable), and **glow** (the
 machine-only-readability demo).
 
+## The vault
+
+The ring is a **gated vault**: every `/v1/` route requires the vault
+password (`X-Vault-Password` header, or `Authorization: Bearer`),
+set server-side via `AOS_VAULT_PASSWORD`. No password configured →
+the vault fails closed (503). `/health` and `/` stay open; they expose
+metadata only, never ring contents.
+
 ## Volatility
 
-Ring state lives **in memory only**. A machine restart clears it.
-This is the design, not a limitation: the ring models RAM (sustained
-interference patterns), not disk. Do not treat it as storage.
+Default mode: ring state lives **in memory only** — a restart clears
+it; the ring models RAM (sustained interference patterns), not disk.
+With `AOS_DATA_DIR` set, a persistence layer snapshots every mutation
+to disk (atomic write-through) and restores it at boot. The Docker
+deployment (below) runs in this persistent mode.
 
 ## Layout
 
@@ -50,8 +60,16 @@ interference patterns), not disk. Do not treat it as storage.
 
 ```
 pip install numpy flask
-python3 server.py          # PORT=8080 by default
+AOS_VAULT_PASSWORD=<password> python3 server.py   # PORT=8080 by default
 curl localhost:8080/health
+curl -H "X-Vault-Password: <password>" -X POST localhost:8080/v1/ring/read ...
+```
+
+## Run (Docker, persistent + gated)
+
+```
+cp .env.example .env       # set AOS_VAULT_PASSWORD in .env
+docker compose up -d       # state persists in the aos-ring-data volume
 ```
 
 ## Deploy (Fly)
