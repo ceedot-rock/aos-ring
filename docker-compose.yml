@@ -1,0 +1,16 @@
+# aos-ring with persistent ring state.
+# The named volume holds the write-through snapshots (ring-state.npz);
+# the container can be rebuilt/restarted freely — state restores at boot.
+services:
+  aos-ring:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      AOS_DATA_DIR: /data
+    volumes:
+      - aos-ring-data:/data
+    restart: unless-stopped
+
+volumes:
+  aos-ring-data:

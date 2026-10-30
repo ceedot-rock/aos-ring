@@ -15,8 +15,14 @@ thresholding. This is a real ring, not a dict: reads are physical.
 (/v1/ring/query instead correlates the query pattern against the stored
 bits directly — no channel model on that path.)
 
-VOLATILE BY DESIGN. Ring state lives in memory only. A restart
-clears it — it models RAM, not disk. Nothing here is persisted.
+STATE MODES. Default: volatile — ring state lives in memory only and
+a restart clears it; it models RAM, not disk. With AOS_DATA_DIR set
+(the Docker deployment sets it to the /data volume), the ring gains a
+persistence layer underneath the same optics: every mutation is
+snapshotted write-through to <AOS_DATA_DIR>/ring-state.npz (atomic
+temp-file + rename), and boot restores the snapshot if one exists.
+The channel model never changes — persistence stores the intended
+bits exactly as written, reads still pass through the optics.
 
 Channel math: see SIM_NOTES.md — it documents every physical assumption
 of the in-repo channel model.
@@ -58,9 +64,74 @@ app = Flask(__name__)
 _lock = threading.Lock()
 _rng = np.random.default_rng()         # unseeded: a real ring has real noise
 
-# Volatile state. Restart clears it. That's the point.
+# Ring state. In-memory working set; when DATA_DIR is set, every
+# mutation is written through to a snapshot on disk and restored at
+# boot (see _persist/_restore). No DATA_DIR -> purely volatile.
 _store = {}                            # (t,c,f,p,l) -> uint8 (H,WD) intended bits
 _active_tubes = set(range(T))           # lit diameters; dark tubes carry nothing
+
+# ---------------------------------------------------------------------------
+# persistence layer (active only when AOS_DATA_DIR is set)
+# ---------------------------------------------------------------------------
+DATA_DIR = os.environ.get("AOS_DATA_DIR", "").strip()
+SNAPSHOT = os.path.join(DATA_DIR, "ring-state.npz") if DATA_DIR else None
+_restored_pages = 0
+
+
+def _persist():
+    """Write-through snapshot of the full ring state. Caller holds
+    _lock. Atomic: serialize to a temp file in the same directory,
+    fsync, then os.replace over the live snapshot."""
+    if not DATA_DIR:
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    payload = {",".join(str(x) for x in k): v for k, v in _store.items()}
+    payload["__active_tubes__"] = np.array(sorted(_active_tubes), dtype=np.int64)
+    tmp = SNAPSHOT + ".tmp"
+    with open(tmp, "wb") as fh:
+        np.savez_compressed(fh, **payload)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, SNAPSHOT)
+
+
+def _restore():
+    """Boot-time restore from the snapshot, if persistence is on and a
+    snapshot exists. A corrupt snapshot never blocks boot: it is moved
+    aside and the ring starts empty (the failure stays visible)."""
+    global _restored_pages
+    if not DATA_DIR or not os.path.exists(SNAPSHOT):
+        return
+    try:
+        with np.load(SNAPSHOT) as z:
+            tubes = z["__active_tubes__"] if "__active_tubes__" in z.files else None
+            pages = {}
+            for name in z.files:
+                if name == "__active_tubes__":
+                    continue
+                arr = np.asarray(z[name], dtype=np.uint8)
+                if arr.shape != (H, WD):
+                    raise ValueError(f"bad page shape {arr.shape} for {name}")
+                pages[tuple(int(x) for x in name.split(","))] = arr
+    except Exception as e:  # corrupt snapshot: preserve it, start empty
+        aside = SNAPSHOT + ".corrupt"
+        try:
+            os.replace(SNAPSHOT, aside)
+        except OSError:
+            aside = "(could not move aside)"
+        print(f"[aos-ring] snapshot unreadable ({e}); moved to {aside}; "
+              f"starting empty", flush=True)
+        return
+    _store.update(pages)
+    if tubes is not None:
+        _active_tubes.clear()
+        _active_tubes.update(int(t) for t in tubes if 0 <= int(t) < T)
+    _restored_pages = len(pages)
+    print(f"[aos-ring] restored {_restored_pages} pages from {SNAPSHOT}",
+          flush=True)
+
+
+_restore()
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +231,15 @@ def health():
         return jsonify({
             "ok": True,
             "service": "aos-ring",
-            "volatile": True,
-            "volatility_note": "ring state lives in memory only; a restart clears it (RAM, not disk)",
+            "volatile": not DATA_DIR,
+            "volatility_note": ("persistence on: mutations snapshot to "
+                                "AOS_DATA_DIR and restore at boot"
+                                if DATA_DIR else
+                                "ring state lives in memory only; a restart clears it (RAM, not disk)"),
+            "persistence": {"enabled": bool(DATA_DIR),
+                            "dir": DATA_DIR or None,
+                            "snapshot": SNAPSHOT,
+                            "restored_pages": _restored_pages},
             "ring": {"tubes": T, "colors": C, "freq": F, "pol": P, "oam_modes": L,
                         "channels": N_CH, "page_bits": BITS_PER_PAGE},
             "stored_pages": len(_store),
@@ -187,6 +265,7 @@ def write():
                 return _err(str(e))
             _store[_key(a)] = bits
             written.append(list(a))
+        _persist()
     return jsonify({"ok": True, "written": len(written), "addresses": written})
 
 
@@ -259,6 +338,7 @@ def route():
     with _lock:
         _active_tubes.clear()
         _active_tubes.update(tubes)
+        _persist()
         active = sorted(_active_tubes)
     return jsonify({"ok": True, "active_tubes": active,
                     "note": "deactivated diameters are dark: reads return zeros"})
@@ -288,6 +368,7 @@ def delete():
                 else:
                     _store[k] = _rng.integers(0, 2, size=(H, WD)).astype(np.uint8)
                 n += 1
+        _persist()
     return jsonify({"ok": True, "deleted": n, "mode": mode,
                     "note": "kill: indistinguishable from never-written; "
                             "decohere: present-but-unreadable (see SIM_NOTES.md)"})
